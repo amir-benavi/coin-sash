@@ -12,6 +12,7 @@ class CoinDash extends Phaser.Scene {
     this.paused = false;
     this.hearts = c.lives;
     this.invulnerableMs = 0;
+    this.spareHeartUsed = false;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
@@ -114,6 +115,16 @@ class CoinDash extends Phaser.Scene {
     this.player.body.reset(COIN_DASH.width / 2, COIN_DASH.height / 2);
   }
 
+  grantSpareHeart() {
+    // One spare heart per round, only once the player has enough coins.
+    if (this.spareHeartUsed || this.score <= COIN_DASH.spareHeartMinCoins) return false;
+    this.spareHeartUsed = true;
+    this.hearts = 1;
+    // Brief invulnerability so a drone still overlapping the player does not hit again next frame.
+    this.invulnerableMs = COIN_DASH.hitInvulnerableMs;
+    return true;
+  }
+
   update(time, delta) {
     if (this.finished || this.paused) return;
     if (this.phaseOver) {
@@ -143,7 +154,7 @@ class CoinDash extends Phaser.Scene {
     const hearts = '♥'.repeat(this.hearts) + '♡'.repeat(COIN_DASH.lives - this.hearts);
     this.hud.setText(`Coins: ${this.score}   Best: ${this.highScore}       ${hearts}       Time: ${seconds}s`);
     if (seconds === 0) this.finish('Time is up!');
-    if (this.hearts === 0) this.finish('A drone caught you!');
+    if (this.hearts === 0 && !this.grantSpareHeart()) this.finish('A drone caught you!');
   }
 
   pauseRound() {
