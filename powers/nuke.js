@@ -32,6 +32,8 @@ POWER_UPS.nuke = {
   },
 
   collect(scene) {
+    // The skull lowers flashEffect.alpha for its red flash; the nuke always flashes at full strength.
+    scene.cameras.main.flashEffect.alpha = 1;
     scene.cameras.main.flash(this.flashMs, 255, 220, 150, true);
     scene.cameras.main.shake(this.shakeMs, this.shakeIntensity, true);
     // We are inside the player/power-up overlap callback, so only mark the blast here;
