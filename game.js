@@ -12,6 +12,7 @@ class CoinDash extends Phaser.Scene {
     this.paused = false;
     this.hearts = c.lives;
     this.invulnerableMs = 0;
+    this.freezeLeftMs = 0;
     this.pulseMs = 0;
     this.poisonSpawnMs = c.coinTypes.poisonEverySeconds * 1000;
     this.spareHeartUsed = false;
@@ -41,6 +42,7 @@ class CoinDash extends Phaser.Scene {
       coin.body.enable = false;
       this.score += coin.value;
       this.playCoinSound();
+      if (coin.freeze) this.freezeDrones();
       // Mark the phase as over here; update() spawns the next one outside the physics callback.
       if (this.coins.countActive(true) === 0) this.phaseOver = true;
     });
@@ -118,8 +120,16 @@ class CoinDash extends Phaser.Scene {
     const { x, y } = this.randomSpot();
     // Sometimes a coin is a bigger, pulsing bonus coin (scaled in updateCoins()).
     const bonus = Math.random() < t.bonusChance;
-    const coin = this.add.circle(x, y, 9, bonus ? t.colors.bonus : c.colors.coin);
-    if (bonus) coin.setStrokeStyle(2, t.colors.bonusOutline);
+    // Rarer ice-blue diamond freeze coin; at most one per phase (spawnPhase() clears the old coins first).
+    const freeze = !bonus && Math.random() < c.freezeCoinChance && !this.coins.getChildren().some((other) => other.freeze);
+    let coin;
+    if (freeze) {
+      coin = this.add.rectangle(x, y, 14, 14, c.freezeColors.coin).setAngle(45).setStrokeStyle(2, c.freezeColors.outline);
+    } else {
+      coin = this.add.circle(x, y, 9, bonus ? t.colors.bonus : c.colors.coin);
+      if (bonus) coin.setStrokeStyle(2, t.colors.bonusOutline);
+    }
+    coin.freeze = freeze;
     coin.value = bonus ? t.bonusValue : 1;
     this.physics.add.existing(coin);
     coin.body.setCircle(9);
@@ -222,10 +232,12 @@ class CoinDash extends Phaser.Scene {
     const drone = this.addDrone(spot.x, spot.y, toCentre + Phaser.Math.Between(-35, 35));
     // Harmless and blinking for warnMs; counted down in updateDrones(), so it pauses with the game.
     drone.warnMs = d.warnMs;
+    // A drone that appears during a freeze waits for it to end too.
+    if (this.freezeLeftMs > 0) this.freezeDrone(drone);
   }
 
   hitDrone(drone) {
-    if (drone.warnMs > 0) return; // still blinking in
+    if (drone.warnMs > 0 || this.freezeLeftMs > 0) return; // blinking in, or frozen and harmless
     this.loseHeart('A drone caught you!');
   }
 
@@ -266,6 +278,7 @@ class CoinDash extends Phaser.Scene {
       });
     }
     this.updateDrones(delta);
+    this.updateFreeze(delta);
     // Blink while invulnerable; a countdown (not a timer or tween) leaves nothing behind on restart.
     this.invulnerableMs = Math.max(0, this.invulnerableMs - delta);
     this.player.setAlpha(this.invulnerableMs > 0 && Math.floor(this.invulnerableMs / 100) % 2 ? 0.25 : 1);
@@ -277,7 +290,8 @@ class CoinDash extends Phaser.Scene {
     const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
     this.player.body.setVelocity(direction.x, direction.y);
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
-    this.hud.setText(`Coins: ${this.score}   Best: ${this.highScore}`);
+    const freezeHud = this.freezeLeftMs > 0 ? `   Freeze: ${Math.ceil(this.freezeLeftMs / 1000)}s` : '';
+    this.hud.setText(`Coins: ${this.score}   Best: ${this.highScore}${freezeHud}`);
     this.timeText.setText(`Time: ${seconds}s`);
     this.drawHearts();
     if (seconds === 0) this.finish('Time is up!');
@@ -322,6 +336,44 @@ class CoinDash extends Phaser.Scene {
       drone.warnMs = Math.max(0, drone.warnMs - delta);
       drone.setAlpha(drone.warnMs > 0 && Math.floor(drone.warnMs / 100) % 2 ? 0.25 : 1);
     });
+  }
+
+  freezeDrones() {
+    const c = COIN_DASH;
+    // Collecting another freeze coin during a freeze just restarts the countdown.
+    this.freezeLeftMs = c.freezeMs;
+    this.drones.getChildren().forEach((drone) => this.freezeDrone(drone));
+    const label = this.add.text(c.width / 2, c.height / 2 - 40, 'FROZEN!',
+      { font: '28px monospace', color: '#bff4ff' }).setOrigin(0.5);
+    this.tweens.add({ targets: label, alpha: 0, duration: 1200, onComplete: () => label.destroy() });
+  }
+
+  freezeDrone(drone) {
+    if (drone.frozen) return;
+    drone.frozen = true;
+    // Keep the direction so the drone carries on the same way when the freeze ends.
+    drone.frozenDir = drone.body.velocity.clone().normalize();
+    drone.body.setVelocity(0, 0);
+    drone.setFillStyle(COIN_DASH.freezeColors.drone);
+  }
+
+  unfreezeDrones() {
+    const c = COIN_DASH;
+    // Use the current speed (dronesFast may have changed while frozen).
+    const speed = this.dronesFast ? c.droneSpeedFast : c.droneSpeed;
+    this.drones.getChildren().forEach((drone) => {
+      if (!drone.frozen) return;
+      drone.frozen = false;
+      drone.body.setVelocity(drone.frozenDir.x * speed, drone.frozenDir.y * speed);
+      drone.setFillStyle(c.colors.drone);
+    });
+  }
+
+  updateFreeze(delta) {
+    // Countdown on delta, like invulnerableMs, so it pauses with the game.
+    if (this.freezeLeftMs <= 0) return;
+    this.freezeLeftMs = Math.max(0, this.freezeLeftMs - delta);
+    if (this.freezeLeftMs === 0) this.unfreezeDrones();
   }
 
   updateBackground() {
