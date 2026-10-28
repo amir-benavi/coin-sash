@@ -79,15 +79,22 @@ class CoinDash extends Phaser.Scene {
     try {
       const ctx = this.audioContext();
       if (!ctx || ctx.state !== 'running') return;
-      const t = ctx.currentTime, osc = ctx.createOscillator(), gain = ctx.createGain();
+      const v = COIN_DASH.coinSoundVariation, t = ctx.currentTime;
+      // Quick consecutive pickups climb in pitch; a pause resets the combo.
+      const quick = this.lastCoinSoundAt !== undefined && (t - this.lastCoinSoundAt) * 1000 <= v.comboWindowMs;
+      this.coinCombo = quick ? Math.min((this.coinCombo || 0) + 1, v.comboMax) : 0;
+      this.lastCoinSoundAt = t;
+      const semis = Phaser.Utils.Array.GetRandom(v.scale) + this.coinCombo * v.comboStep;
+      const ratio = Math.pow(2, semis / 12), d = 1 + Phaser.Math.FloatBetween(-v.durationJitter, v.durationJitter);
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
       osc.type = 'square';
-      osc.frequency.setValueAtTime(988, t);
-      osc.frequency.setValueAtTime(1319, t + 0.05);
+      osc.frequency.setValueAtTime(988 * ratio, t);
+      osc.frequency.setValueAtTime(1319 * ratio, t + 0.05 * d);
       gain.gain.setValueAtTime(COIN_DASH.coinSoundVolume, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12 * d);
       osc.connect(gain).connect(ctx.destination);
       osc.start(t);
-      osc.stop(t + 0.13);
+      osc.stop(t + 0.13 * d);
     } catch (e) { /* audio is optional */ }
   }
 
