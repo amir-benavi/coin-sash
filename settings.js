@@ -33,5 +33,7 @@ window.COIN_DASH = {
     poisonEverySeconds: 6, poisonMax: 3, poisonLifetimeSeconds: 10, poisonWarnSeconds: 2,
     colors: { bonus: 0x7ff6ff, bonusOutline: 0xffffff, poison: 0xb04cff, poisonOutline: 0x2e0a45 }
   },
+  // A freeze coin (ice-blue diamond, rarer than bonus, at most one per phase) stops all drones for freezeMs.
+  freezeMs: 5000, freezeCoinChance: 0.05, freezeColors: { coin: 0xbff4ff, outline: 0xffffff, drone: 0x7fd8ff },
   colors: { background: 0x101c31, player: 0x71e8ce, coin: 0xffd166, drone: 0xff657a }
 };
