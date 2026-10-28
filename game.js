@@ -17,8 +17,11 @@ class CoinDash extends Phaser.Scene {
     this.spareHeartUsed = false;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
+    // Optional picture from the start screen; the grid fill is translucent so it shows through.
+    this.bgImage = addBackgroundImage(this);
+    this.bgFillAlpha = this.bgImage ? c.backgroundImageFillAlpha : 1;
     this.background = this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
-      c.colors.background, 1, 0x24334b, 0.45);
+      c.colors.background, this.bgFillAlpha, 0x24334b, 0.45);
     // Top bar (y 0–44, above the play area): coins left, hearts centred, time right-aligned.
     this.add.rectangle(c.width / 2, 22, c.width, 44, 0x000000, c.hud.barAlpha);
     this.hud = this.add.text(18, 12, '', { font: '18px monospace', color: '#ffffff' });
@@ -345,7 +348,7 @@ class CoinDash extends Phaser.Scene {
     }
     const camera = this.cameras.main;
     if (color === grid.fillColor && color === camera.backgroundColor.color) return;
-    grid.setFillStyle(color, 1);
+    grid.setFillStyle(color, this.bgFillAlpha);
     camera.setBackgroundColor(color);
   }
 
@@ -409,5 +412,5 @@ window.coinDashGame = new Phaser.Game({
   backgroundColor: COIN_DASH.colors.background,
   physics: { default: 'arcade', arcade: { debug: false } },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
-  scene: CoinDash
+  scene: [StartScene, CoinDash]
 });
