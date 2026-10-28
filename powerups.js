@@ -10,5 +10,6 @@
 //   reset(scene)                  optional: clear this power's state at the start of every round
 //   update(scene, delta)          optional: runs each frame while not paused or finished (timed effects)
 //   blocksDamage(scene)           optional: return true while the player must not lose hearts
+//   holdsDrones(scene)            optional: return true while no new drones may arrive
 // };
 window.POWER_UPS = {};

@@ -77,6 +77,11 @@ POWER_UPS.nuke = {
     }
   },
 
+  holdsDrones(scene) {
+    // While the countdown runs the playfield stays clear; the regular spawner refills it afterwards.
+    return scene.nukeRespawnMs > 0;
+  },
+
   detonate(scene) {
     const enemies = [...scene.drones.getChildren(), ...scene.poisonCoins.getChildren()];
     // A short orange burst where each enemy was, plus a shockwave from the player.
