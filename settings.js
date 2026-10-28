@@ -12,6 +12,9 @@ window.COIN_DASH = {
   coinSoundVolume: 0.15,
   fastDronesAt: 5,
   droneSpeedFast: 170,
+  // One more drone every everySeconds of played time, up to max in total; new drones appear at an
+  // edge at least minDistance px from the player and blink harmlessly for warnMs.
+  droneSpawn: { everySeconds: 10, max: 7, minDistance: 220, warnMs: 1000 },
   hud: { heartSize: 20, heartGap: 10, heartFull: 0xff4d6d, heartEmpty: 0x6b7a93, emptyAlpha: 0.3, popScale: 1.6, barAlpha: 0.3 },
   lives: 3,
   hitInvulnerableMs: 1500,

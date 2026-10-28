@@ -33,13 +33,7 @@ class CoinDash extends Phaser.Scene {
     this.spawnPhase();
     this.drones = this.physics.add.group();
     this.dronesFast = false;
-    for (let i = 0; i < c.droneCount; i++) {
-      const drone = this.add.rectangle(90 + i * 270, 100, 26, 26, c.colors.drone);
-      this.drones.add(drone);
-      drone.body.setCollideWorldBounds(true).setBounce(1, 1);
-      const angle = (35 + i * 105) * Math.PI / 180;
-      drone.body.setVelocity(Math.cos(angle) * c.droneSpeed, Math.sin(angle) * c.droneSpeed);
-    }
+    for (let i = 0; i < c.droneCount; i++) this.addDrone(90 + i * 270, 100, 35 + i * 105);
     this.physics.add.overlap(this.player, this.coins, (player, coin) => {
       // Disable first so the same coin cannot be counted twice.
       if (this.finished || !coin.active) return;
@@ -50,7 +44,7 @@ class CoinDash extends Phaser.Scene {
       // Mark the phase as over here; update() spawns the next one outside the physics callback.
       if (this.coins.countActive(true) === 0) this.phaseOver = true;
     });
-    this.physics.add.overlap(this.player, this.drones, () => this.hitDrone());
+    this.physics.add.overlap(this.player, this.drones, (player, drone) => this.hitDrone(drone));
     this.physics.add.overlap(this.player, this.poisonCoins, (player, poison) => this.hitPoison(poison));
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
@@ -186,7 +180,45 @@ class CoinDash extends Phaser.Scene {
     this.shownHearts = this.hearts;
   }
 
-  hitDrone() {
+  addDrone(x, y, angleDeg) {
+    const c = COIN_DASH;
+    const drone = this.add.rectangle(x, y, 26, 26, c.colors.drone);
+    this.drones.add(drone);
+    drone.body.setCollideWorldBounds(true).setBounce(1, 1);
+    // Use the current speed so drones added after the speed-up are fast too.
+    const speed = this.dronesFast ? c.droneSpeedFast : c.droneSpeed;
+    const angle = angleDeg * Math.PI / 180;
+    drone.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+    drone.warnMs = 0;
+    return drone;
+  }
+
+  spawnExtraDrone() {
+    const c = COIN_DASH;
+    const d = c.droneSpawn;
+    // Try random points on the playfield edges; fall back to the corner farthest from the player.
+    const left = 13, right = c.width - 13, top = 44 + 13, bottom = c.height - 13;
+    const far = (x, y) => Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y);
+    let spot = null;
+    for (let i = 0; i < 20 && !spot; i++) {
+      const side = Phaser.Math.Between(0, 3);
+      const x = side === 0 ? left : side === 1 ? right : Phaser.Math.Between(left, right);
+      const y = side === 2 ? top : side === 3 ? bottom : Phaser.Math.Between(top, bottom);
+      if (far(x, y) >= d.minDistance) spot = { x, y };
+    }
+    if (!spot) {
+      const corners = [{ x: left, y: top }, { x: right, y: top }, { x: left, y: bottom }, { x: right, y: bottom }];
+      spot = corners.reduce((best, p) => (far(p.x, p.y) > far(best.x, best.y) ? p : best));
+    }
+    // Head roughly towards the middle of the playfield so it does not hug the wall.
+    const toCentre = Phaser.Math.RadToDeg(Math.atan2((top + bottom) / 2 - spot.y, c.width / 2 - spot.x));
+    const drone = this.addDrone(spot.x, spot.y, toCentre + Phaser.Math.Between(-35, 35));
+    // Harmless and blinking for warnMs; counted down in updateDrones(), so it pauses with the game.
+    drone.warnMs = d.warnMs;
+  }
+
+  hitDrone(drone) {
+    if (drone.warnMs > 0) return; // still blinking in
     this.loseHeart('A drone caught you!');
   }
 
@@ -226,6 +258,7 @@ class CoinDash extends Phaser.Scene {
         drone.body.setVelocity(dir.x * COIN_DASH.droneSpeedFast, dir.y * COIN_DASH.droneSpeedFast);
       });
     }
+    this.updateDrones(delta);
     // Blink while invulnerable; a countdown (not a timer or tween) leaves nothing behind on restart.
     this.invulnerableMs = Math.max(0, this.invulnerableMs - delta);
     this.player.setAlpha(this.invulnerableMs > 0 && Math.floor(this.invulnerableMs / 100) % 2 ? 0.25 : 1);
@@ -266,6 +299,22 @@ class CoinDash extends Phaser.Scene {
       const fading = poison.lifeMs < t.poisonWarnSeconds * 1000;
       poison.setAlpha(fading && Math.floor(poison.lifeMs / 150) % 2 ? 0.2 : 1);
     }
+  }
+
+  updateDrones(delta) {
+    const c = COIN_DASH;
+    const d = c.droneSpawn;
+    // One more drone every everySeconds of played time; elapsed derives from the deadline
+    // (which resume pushes back), so paused time never counts.
+    const remaining = this.deadline - this.time.now;
+    const elapsed = c.roundSeconds * 1000 - remaining;
+    const wanted = Math.min(d.max, c.droneCount + Math.floor(elapsed / (d.everySeconds * 1000)));
+    if (remaining > 0 && this.drones.getLength() < wanted) this.spawnExtraDrone();
+    this.drones.getChildren().forEach((drone) => {
+      if (drone.warnMs <= 0) return;
+      drone.warnMs = Math.max(0, drone.warnMs - delta);
+      drone.setAlpha(drone.warnMs > 0 && Math.floor(drone.warnMs / 100) % 2 ? 0.25 : 1);
+    });
   }
 
   updateBackground() {
