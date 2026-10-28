@@ -226,16 +226,17 @@ class CoinDash extends Phaser.Scene {
 
   hitDrone(drone) {
     if (drone.warnMs > 0) return; // still blinking in
-    this.loseHeart('A drone caught you!');
+    if (this.loseHeart('A drone caught you!')) blastAt(this, drone.x, drone.y, COIN_DASH.colors.drone);
   }
 
   loseHeart(reason) {
     // The overlap fires every frame while touching, so ignore hits while invulnerable.
-    if (this.finished || this.hearts === 0 || this.invulnerableMs > 0) return;
+    if (this.finished || this.hearts === 0 || this.invulnerableMs > 0) return false;
     this.hearts--;
     this.deathReason = reason;
-    if (this.hearts === 0) return; // update() ends the round after refreshing the HUD.
+    if (this.hearts === 0) return true; // update() ends the round after refreshing the HUD.
     this.invulnerableMs = COIN_DASH.hitInvulnerableMs;
+    return true;
   }
 
   grantSpareHeart() {
