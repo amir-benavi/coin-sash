@@ -17,10 +17,9 @@ class CoinDash extends Phaser.Scene {
     this.player = this.add.rectangle(c.width / 2, c.height / 2, 24, 24, c.colors.player);
     this.physics.add.existing(this.player);
     this.player.body.setCollideWorldBounds(true);
-    this.coin = this.add.circle(100, 100, 9, c.colors.coin);
-    this.physics.add.existing(this.coin);
-    this.coin.body.setCircle(9);
-    this.placeCoin();
+    this.coins = this.physics.add.group();
+    this.phaseOver = false;
+    this.spawnPhase();
     this.drones = this.physics.add.group();
     for (let i = 0; i < c.droneCount; i++) {
       const drone = this.add.rectangle(90 + i * 270, 100, 26, 26, c.colors.drone);
@@ -29,10 +28,14 @@ class CoinDash extends Phaser.Scene {
       const angle = (35 + i * 105) * Math.PI / 180;
       drone.body.setVelocity(Math.cos(angle) * c.droneSpeed, Math.sin(angle) * c.droneSpeed);
     }
-    this.physics.add.overlap(this.player, this.coin, () => {
-      if (this.finished) return;
+    this.physics.add.overlap(this.player, this.coins, (player, coin) => {
+      // Disable first so the same coin cannot be counted twice.
+      if (this.finished || !coin.active) return;
+      this.coins.killAndHide(coin);
+      coin.body.enable = false;
       this.score++;
-      this.placeCoin();
+      // Mark the phase as over here; update() spawns the next one outside the physics callback.
+      if (this.coins.countActive(true) === 0) this.phaseOver = true;
     });
     this.physics.add.overlap(this.player, this.drones, () => this.hitDrone());
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -42,16 +45,27 @@ class CoinDash extends Phaser.Scene {
     this.input.keyboard.on('keydown-P', (event) => (event.shiftKey ? this.resumeRound() : this.pauseRound()));
   }
 
+  spawnPhase() {
+    // Remove leftover collected coins, then place a new random group of coins.
+    this.coins.clear(true, true);
+    const count = Phaser.Math.Between(COIN_DASH.coinMin, COIN_DASH.coinMax);
+    for (let i = 0; i < count; i++) this.placeCoin();
+  }
+
   placeCoin() {
     const c = COIN_DASH;
-    // Avoid spawning the next coin directly underneath the player.
+    // Avoid spawning coins directly underneath the player or on top of each other.
     let x, y;
     do {
       x = Phaser.Math.Between(25, c.width - 25);
       y = Phaser.Math.Between(70, c.height - 25);
-    } while (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 60);
-    this.coin.setPosition(x, y);
-    this.coin.body.reset(x, y);
+    } while (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 60
+      || this.coins.getChildren().some((coin) => Phaser.Math.Distance.Between(x, y, coin.x, coin.y) < 30));
+    const coin = this.add.circle(x, y, 9, c.colors.coin);
+    this.physics.add.existing(coin);
+    coin.body.setCircle(9);
+    coin.body.reset(x, y);
+    this.coins.add(coin);
   }
 
   hitDrone() {
@@ -65,6 +79,10 @@ class CoinDash extends Phaser.Scene {
 
   update(time, delta) {
     if (this.finished || this.paused) return;
+    if (this.phaseOver) {
+      this.phaseOver = false;
+      this.spawnPhase();
+    }
     // Blink while invulnerable; a countdown (not a timer or tween) leaves nothing behind on restart.
     this.invulnerableMs = Math.max(0, this.invulnerableMs - delta);
     this.player.setAlpha(this.invulnerableMs > 0 && Math.floor(this.invulnerableMs / 100) % 2 ? 0.25 : 1);
