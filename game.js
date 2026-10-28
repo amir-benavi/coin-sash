@@ -196,7 +196,6 @@ class CoinDash extends Phaser.Scene {
     this.deathReason = reason;
     if (this.hearts === 0) return; // update() ends the round after refreshing the HUD.
     this.invulnerableMs = COIN_DASH.hitInvulnerableMs;
-    this.player.body.reset(COIN_DASH.width / 2, COIN_DASH.height / 2);
   }
 
   update(time, delta) {
