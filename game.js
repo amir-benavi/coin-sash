@@ -1,4 +1,6 @@
 /* global Phaser, COIN_DASH */
+const HIGH_SCORE_KEY = 'coinDash.highScore';
+let memoryHighScore = 0;
 class CoinDash extends Phaser.Scene {
   constructor() { super('CoinDash'); }
 
@@ -6,6 +8,7 @@ class CoinDash extends Phaser.Scene {
     const c = COIN_DASH;
     this.score = 0;
     this.finished = false;
+    this.highScore = this.loadHighScore();
     this.paused = false;
     this.hearts = c.lives;
     this.invulnerableMs = 0;
@@ -138,7 +141,7 @@ class CoinDash extends Phaser.Scene {
     this.player.body.setVelocity(direction.x, direction.y);
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
     const hearts = '♥'.repeat(this.hearts) + '♡'.repeat(COIN_DASH.lives - this.hearts);
-    this.hud.setText(`Coins: ${this.score}          ${hearts}          Time: ${seconds}s`);
+    this.hud.setText(`Coins: ${this.score}   Best: ${this.highScore}       ${hearts}       Time: ${seconds}s`);
     if (seconds === 0) this.finish('Time is up!');
     if (this.hearts === 0) this.finish('A drone caught you!');
   }
@@ -171,11 +174,28 @@ class CoinDash extends Phaser.Scene {
     this.finished = true;
     this.physics.pause();
     const c = COIN_DASH;
-    this.add.rectangle(c.width / 2, c.height / 2, 460, 150, 0x0a1120, 0.95);
+    const isNewBest = this.score > this.highScore;
+    if (isNewBest) this.saveHighScore(this.score);
+    const best = isNewBest ? 'New high score!' : `Best: ${this.highScore}`;
+    this.add.rectangle(c.width / 2, c.height / 2, 460, 190, 0x0a1120, 0.95);
     this.add.text(c.width / 2, c.height / 2,
-      `${reason}\n${this.score} coins collected\nPress R to try again`,
+      `${reason}\n${this.score} coins collected\n${best}\nPress R to try again`,
       { font: '24px monospace', color: '#ffffff', align: 'center', lineSpacing: 12 }
     ).setOrigin(0.5);
+  }
+
+  // localStorage may be blocked (file://, private mode); fall back to memory.
+  loadHighScore() {
+    try {
+      const stored = parseInt(window.localStorage.getItem(HIGH_SCORE_KEY), 10);
+      if (stored >= 0) memoryHighScore = Math.max(memoryHighScore, stored);
+    } catch (e) { /* storage unavailable */ }
+    return memoryHighScore;
+  }
+
+  saveHighScore(score) {
+    memoryHighScore = this.highScore = score;
+    try { window.localStorage.setItem(HIGH_SCORE_KEY, String(score)); } catch (e) { /* storage unavailable */ }
   }
 }
 window.coinDashGame = new Phaser.Game({
