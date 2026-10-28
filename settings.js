@@ -3,7 +3,7 @@ window.COIN_DASH = {
   width: 800,
   height: 500,
   pausePanel: { width: 460, height: 80, alpha: 0.9 },
-  roundSeconds: 45,
+  roundSeconds: 180,
   coinMin: 1,
   coinMax: 4,
   playerSpeed: 240,
