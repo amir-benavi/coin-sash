@@ -6,6 +6,7 @@ class CoinDash extends Phaser.Scene {
     const c = COIN_DASH;
     this.score = 0;
     this.finished = false;
+    this.paused = false;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
@@ -35,6 +36,8 @@ class CoinDash extends Phaser.Scene {
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
     this.input.keyboard.on('keydown-R', () => this.scene.restart());
+    // keydown-P fires for both p and P; Shift tells resume apart from pause.
+    this.input.keyboard.on('keydown-P', (event) => (event.shiftKey ? this.resumeRound() : this.pauseRound()));
   }
 
   placeCoin() {
@@ -50,7 +53,7 @@ class CoinDash extends Phaser.Scene {
   }
 
   update() {
-    if (this.finished) return;
+    if (this.finished || this.paused) return;
     const dx = Number(this.cursors.right.isDown || this.keys.D.isDown)
       - Number(this.cursors.left.isDown || this.keys.A.isDown);
     const dy = Number(this.cursors.down.isDown || this.keys.S.isDown)
@@ -60,6 +63,29 @@ class CoinDash extends Phaser.Scene {
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
     this.hud.setText(`Coins: ${this.score}                       Time: ${seconds}s`);
     if (seconds === 0) this.finish('Time is up!');
+  }
+
+  pauseRound() {
+    if (this.finished || this.paused) return;
+    this.paused = true;
+    this.pausedAt = this.time.now;
+    this.physics.pause();
+    const c = COIN_DASH;
+    const panel = c.pausePanel;
+    this.pauseOverlay = this.add.container(0, 0, [
+      this.add.rectangle(c.width / 2, c.height / 2, panel.width, panel.height, 0x0a1120, panel.alpha),
+      this.add.text(c.width / 2, c.height / 2, 'PAUSED — press Shift+P to resume',
+        { font: '20px monospace', color: '#ffffff' }).setOrigin(0.5)
+    ]);
+  }
+
+  resumeRound() {
+    if (!this.paused) return;
+    this.paused = false;
+    // The round timer reads this.deadline, so push it back by the time spent paused.
+    this.deadline += this.time.now - this.pausedAt;
+    this.pauseOverlay.destroy();
+    this.physics.resume();
   }
 
   finish(reason) {
