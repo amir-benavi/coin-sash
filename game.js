@@ -29,12 +29,45 @@ class CoinDash extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.coin, () => {
       if (this.finished) return;
       this.score++;
+      this.playCoinSound();
       this.placeCoin();
     });
     this.physics.add.overlap(this.player, this.drones, () => this.finish('A drone caught you!'));
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
     this.input.keyboard.on('keydown-R', () => this.scene.restart());
+    // Browsers may suspend audio until a user gesture; resume on any key press.
+    this.input.keyboard.on('keydown', () => {
+      const ctx = this.audioContext();
+      if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+    });
+  }
+
+  audioContext() {
+    // Prefer Phaser's WebAudio context; otherwise lazily create our own (null if unsupported).
+    if (this.sound && this.sound.context) return this.sound.context;
+    if (this.audioCtx === undefined) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      try { this.audioCtx = Ctx ? new Ctx() : null; } catch (e) { this.audioCtx = null; }
+    }
+    return this.audioCtx;
+  }
+
+  playCoinSound() {
+    // Synthesized two-note "blip" so the game needs no audio assets.
+    try {
+      const ctx = this.audioContext();
+      if (!ctx || ctx.state !== 'running') return;
+      const t = ctx.currentTime, osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(988, t);
+      osc.frequency.setValueAtTime(1319, t + 0.05);
+      gain.gain.setValueAtTime(COIN_DASH.coinSoundVolume, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.13);
+    } catch (e) { /* audio is optional */ }
   }
 
   placeCoin() {
