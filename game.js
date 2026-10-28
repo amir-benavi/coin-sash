@@ -12,6 +12,8 @@ class CoinDash extends Phaser.Scene {
     this.paused = false;
     this.hearts = c.lives;
     this.invulnerableMs = 0;
+    this.pulseMs = 0;
+    this.poisonSpawnMs = c.coinTypes.poisonEverySeconds * 1000;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.background = this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
@@ -20,6 +22,7 @@ class CoinDash extends Phaser.Scene {
     this.player = this.add.rectangle(c.width / 2, c.height / 2, 24, 24, c.colors.player);
     this.physics.add.existing(this.player);
     this.player.body.setCollideWorldBounds(true);
+    this.poisonCoins = this.physics.add.group();
     this.coins = this.physics.add.group();
     this.phaseOver = false;
     this.spawnPhase();
@@ -37,12 +40,13 @@ class CoinDash extends Phaser.Scene {
       if (this.finished || !coin.active) return;
       this.coins.killAndHide(coin);
       coin.body.enable = false;
-      this.score++;
+      this.score += coin.value;
       this.playCoinSound();
       // Mark the phase as over here; update() spawns the next one outside the physics callback.
       if (this.coins.countActive(true) === 0) this.phaseOver = true;
     });
     this.physics.add.overlap(this.player, this.drones, () => this.hitDrone());
+    this.physics.add.overlap(this.player, this.poisonCoins, (player, poison) => this.hitPoison(poison));
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
     this.input.keyboard.on('keydown-R', () => this.scene.restart());
@@ -89,26 +93,61 @@ class CoinDash extends Phaser.Scene {
     for (let i = 0; i < count; i++) this.placeCoin();
   }
 
-  placeCoin() {
+  randomSpot() {
     const c = COIN_DASH;
-    // Avoid spawning coins directly underneath the player or on top of each other.
+    // Avoid spawning directly underneath the player, and keep coins and poison apart.
+    const others = [...this.coins.getChildren().filter((coin) => coin.active), ...this.poisonCoins.getChildren()];
     let x, y;
     do {
       x = Phaser.Math.Between(25, c.width - 25);
       y = Phaser.Math.Between(70, c.height - 25);
     } while (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 60
-      || this.coins.getChildren().some((coin) => Phaser.Math.Distance.Between(x, y, coin.x, coin.y) < 30));
-    const coin = this.add.circle(x, y, 9, c.colors.coin);
+      || others.some((other) => Phaser.Math.Distance.Between(x, y, other.x, other.y) < 40));
+    return { x, y };
+  }
+
+  placeCoin() {
+    const c = COIN_DASH;
+    const t = c.coinTypes;
+    const { x, y } = this.randomSpot();
+    // Sometimes a coin is a bigger, pulsing bonus coin (scaled in updateCoins()).
+    const bonus = Math.random() < t.bonusChance;
+    const coin = this.add.circle(x, y, 9, bonus ? t.colors.bonus : c.colors.coin);
+    if (bonus) coin.setStrokeStyle(2, t.colors.bonusOutline);
+    coin.value = bonus ? t.bonusValue : 1;
     this.physics.add.existing(coin);
     coin.body.setCircle(9);
     coin.body.reset(x, y);
     this.coins.add(coin);
   }
 
+  spawnPoison() {
+    const t = COIN_DASH.coinTypes;
+    const { x, y } = this.randomSpot();
+    const poison = this.add.star(x, y, 6, 6, 13, t.colors.poison).setStrokeStyle(2, t.colors.poisonOutline);
+    this.poisonCoins.add(poison);
+    poison.lifeMs = t.poisonLifetimeSeconds * 1000;
+  }
+
+  hitPoison(poison) {
+    if (this.finished || !poison.body.enable) return;
+    // Consumed on touch even while invulnerable. Destroying it here would edit the group
+    // mid-overlap, so updateCoins() removes it on the next frame.
+    poison.body.enable = false;
+    poison.setVisible(false);
+    poison.lifeMs = 0;
+    this.loseHeart('Poison got you!');
+  }
+
   hitDrone() {
+    this.loseHeart('A drone caught you!');
+  }
+
+  loseHeart(reason) {
     // The overlap fires every frame while touching, so ignore hits while invulnerable.
     if (this.finished || this.hearts === 0 || this.invulnerableMs > 0) return;
     this.hearts--;
+    this.deathReason = reason;
     if (this.hearts === 0) return; // update() ends the round after refreshing the HUD.
     this.invulnerableMs = COIN_DASH.hitInvulnerableMs;
     this.player.body.reset(COIN_DASH.width / 2, COIN_DASH.height / 2);
@@ -134,6 +173,7 @@ class CoinDash extends Phaser.Scene {
     // Blink while invulnerable; a countdown (not a timer or tween) leaves nothing behind on restart.
     this.invulnerableMs = Math.max(0, this.invulnerableMs - delta);
     this.player.setAlpha(this.invulnerableMs > 0 && Math.floor(this.invulnerableMs / 100) % 2 ? 0.25 : 1);
+    this.updateCoins(delta);
     const dx = Number(this.cursors.right.isDown || this.keys.D.isDown)
       - Number(this.cursors.left.isDown || this.keys.A.isDown);
     const dy = Number(this.cursors.down.isDown || this.keys.S.isDown)
@@ -144,7 +184,31 @@ class CoinDash extends Phaser.Scene {
     const hearts = '♥'.repeat(this.hearts) + '♡'.repeat(COIN_DASH.lives - this.hearts);
     this.hud.setText(`Coins: ${this.score}   Best: ${this.highScore}       ${hearts}       Time: ${seconds}s`);
     if (seconds === 0) this.finish('Time is up!');
-    if (this.hearts === 0) this.finish('A drone caught you!');
+    if (this.hearts === 0) this.finish(this.deathReason);
+  }
+
+  updateCoins(delta) {
+    const t = COIN_DASH.coinTypes;
+    // Like the invulnerability countdown, these run on delta, so they stop while paused.
+    this.pulseMs += delta;
+    const pulse = Math.sin(this.pulseMs / 150);
+    this.coins.getChildren().forEach((coin) => coin.setScale(coin.value > 1 ? t.bonusScale * (1 + 0.08 * pulse) : 1));
+    this.poisonSpawnMs -= delta;
+    if (this.poisonSpawnMs <= 0) {
+      this.poisonSpawnMs += t.poisonEverySeconds * 1000;
+      if (this.poisonCoins.getLength() < t.poisonMax) this.spawnPoison();
+    }
+    for (const poison of this.poisonCoins.getChildren().slice()) {
+      poison.lifeMs -= delta;
+      if (poison.lifeMs <= 0) {
+        poison.destroy();
+        continue;
+      }
+      poison.setScale(1 + 0.15 * pulse).setAngle(12 * pulse);
+      // Blink during the last seconds so the player can see it is about to vanish.
+      const fading = poison.lifeMs < t.poisonWarnSeconds * 1000;
+      poison.setAlpha(fading && Math.floor(poison.lifeMs / 150) % 2 ? 0.2 : 1);
+    }
   }
 
   updateBackground() {
