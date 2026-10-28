@@ -6,6 +6,8 @@ class CoinDash extends Phaser.Scene {
     const c = COIN_DASH;
     this.score = 0;
     this.finished = false;
+    this.hearts = c.lives;
+    this.invulnerableMs = 0;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
@@ -31,7 +33,7 @@ class CoinDash extends Phaser.Scene {
       this.score++;
       this.placeCoin();
     });
-    this.physics.add.overlap(this.player, this.drones, () => this.finish('A drone caught you!'));
+    this.physics.add.overlap(this.player, this.drones, () => this.hitDrone());
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
     this.input.keyboard.on('keydown-R', () => this.scene.restart());
@@ -49,8 +51,20 @@ class CoinDash extends Phaser.Scene {
     this.coin.body.reset(x, y);
   }
 
-  update() {
+  hitDrone() {
+    // The overlap fires every frame while touching, so ignore hits while invulnerable.
+    if (this.finished || this.hearts === 0 || this.invulnerableMs > 0) return;
+    this.hearts--;
+    if (this.hearts === 0) return; // update() ends the round after refreshing the HUD.
+    this.invulnerableMs = COIN_DASH.hitInvulnerableMs;
+    this.player.body.reset(COIN_DASH.width / 2, COIN_DASH.height / 2);
+  }
+
+  update(time, delta) {
     if (this.finished) return;
+    // Blink while invulnerable; a countdown (not a timer or tween) leaves nothing behind on restart.
+    this.invulnerableMs = Math.max(0, this.invulnerableMs - delta);
+    this.player.setAlpha(this.invulnerableMs > 0 && Math.floor(this.invulnerableMs / 100) % 2 ? 0.25 : 1);
     const dx = Number(this.cursors.right.isDown || this.keys.D.isDown)
       - Number(this.cursors.left.isDown || this.keys.A.isDown);
     const dy = Number(this.cursors.down.isDown || this.keys.S.isDown)
@@ -58,8 +72,10 @@ class CoinDash extends Phaser.Scene {
     const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
     this.player.body.setVelocity(direction.x, direction.y);
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
-    this.hud.setText(`Coins: ${this.score}                       Time: ${seconds}s`);
+    const hearts = '♥'.repeat(this.hearts) + '♡'.repeat(COIN_DASH.lives - this.hearts);
+    this.hud.setText(`Coins: ${this.score}          ${hearts}          Time: ${seconds}s`);
     if (seconds === 0) this.finish('Time is up!');
+    if (this.hearts === 0) this.finish('A drone caught you!');
   }
 
   finish(reason) {
