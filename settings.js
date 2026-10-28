@@ -2,6 +2,7 @@
 window.COIN_DASH = {
   width: 800,
   height: 500,
+  pausePanel: { width: 460, height: 80, alpha: 0.9 },
   roundSeconds: 45,
   playerSpeed: 240,
   droneSpeed: 105,
