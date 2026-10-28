@@ -35,5 +35,7 @@ window.COIN_DASH = {
   },
   // A freeze coin (ice-blue diamond, rarer than bonus, at most one per phase) stops all drones for freezeMs.
   freezeMs: 5000, freezeCoinChance: 0.05, freezeColors: { coin: 0xbff4ff, outline: 0xffffff, drone: 0x7fd8ff },
+  // Scan line: sweeps the play field every everyMs, taking durationMs; drawn in color at alpha.
+  gridScan: { everyMs: 4000, durationMs: 1800, alpha: 0.4, color: 0x71e8ce },
   colors: { background: 0x101c31, player: 0x71e8ce, coin: 0xffd166, drone: 0xff657a }
 };
