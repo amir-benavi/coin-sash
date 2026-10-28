@@ -21,6 +21,7 @@ class CoinDash extends Phaser.Scene {
     this.phaseOver = false;
     this.spawnPhase();
     this.drones = this.physics.add.group();
+    this.dronesFast = false;
     for (let i = 0; i < c.droneCount; i++) {
       const drone = this.add.rectangle(90 + i * 270, 100, 26, 26, c.colors.drone);
       this.drones.add(drone);
@@ -82,6 +83,16 @@ class CoinDash extends Phaser.Scene {
     if (this.phaseOver) {
       this.phaseOver = false;
       this.spawnPhase();
+    }
+    // Speed drones up once, keeping each drone's current direction.
+    if (!this.dronesFast && this.score >= COIN_DASH.fastDronesAt) {
+      this.dronesFast = true;
+      this.drones.getChildren().forEach((drone) => {
+        const v = drone.body.velocity;
+        if (v.length() === 0) return;
+        const dir = v.clone().normalize();
+        drone.body.setVelocity(dir.x * COIN_DASH.droneSpeedFast, dir.y * COIN_DASH.droneSpeedFast);
+      });
     }
     // Blink while invulnerable; a countdown (not a timer or tween) leaves nothing behind on restart.
     this.invulnerableMs = Math.max(0, this.invulnerableMs - delta);
