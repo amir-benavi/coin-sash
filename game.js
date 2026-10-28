@@ -14,6 +14,7 @@ class CoinDash extends Phaser.Scene {
     this.invulnerableMs = 0;
     this.pulseMs = 0;
     this.poisonSpawnMs = c.coinTypes.poisonEverySeconds * 1000;
+    this.spareHeartUsed = false;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.background = this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
@@ -198,6 +199,16 @@ class CoinDash extends Phaser.Scene {
     this.invulnerableMs = COIN_DASH.hitInvulnerableMs;
   }
 
+  grantSpareHeart() {
+    // One spare heart per round, only once the player has enough coins.
+    if (this.spareHeartUsed || this.score <= COIN_DASH.spareHeartMinCoins) return false;
+    this.spareHeartUsed = true;
+    this.hearts = 1;
+    // Brief invulnerability so a drone still overlapping the player does not hit again next frame.
+    this.invulnerableMs = COIN_DASH.hitInvulnerableMs;
+    return true;
+  }
+
   update(time, delta) {
     if (this.finished || this.paused) return;
     this.updateBackground();
@@ -230,7 +241,7 @@ class CoinDash extends Phaser.Scene {
     this.timeText.setText(`Time: ${seconds}s`);
     this.drawHearts();
     if (seconds === 0) this.finish('Time is up!');
-    if (this.hearts === 0) this.finish(this.deathReason);
+    if (this.hearts === 0 && !this.grantSpareHeart()) this.finish(this.deathReason);
   }
 
   updateCoins(delta) {
