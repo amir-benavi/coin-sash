@@ -15,6 +15,10 @@ class CoinDash extends Phaser.Scene {
     this.pulseMs = 0;
     this.poisonSpawnMs = c.coinTypes.poisonEverySeconds * 1000;
     this.spareHeartUsed = false;
+    // Coins touched this round (not score, which power-ups double or zero): drives speed and size.
+    this.coinsPicked = 0;
+    this.playerSpeed = c.playerSpeed;
+    this.playerScale = 1; // target scale; updateGrowth() eases the player towards it
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.background = this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
@@ -43,6 +47,7 @@ class CoinDash extends Phaser.Scene {
       this.coins.killAndHide(coin);
       coin.body.enable = false;
       this.score += coin.value;
+      this.coinsPicked++;
       this.playCoinSound();
       // Mark the phase as over here; update() spawns the next one outside the physics callback.
       if (this.coins.countActive(true) === 0) this.phaseOver = true;
@@ -247,7 +252,10 @@ class CoinDash extends Phaser.Scene {
       - Number(this.cursors.left.isDown || this.keys.A.isDown);
     const dy = Number(this.cursors.down.isDown || this.keys.S.isDown)
       - Number(this.cursors.up.isDown || this.keys.W.isDown);
-    const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
+    this.updateGrowth(delta);
+    const g = COIN_DASH.growth;
+    this.playerSpeed = Math.min(g.maxPlayerSpeed, COIN_DASH.playerSpeed + g.speedPerCoin * this.coinsPicked);
+    const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(this.playerSpeed);
     this.player.body.setVelocity(direction.x, direction.y);
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
     this.hud.setText(`Coins: ${this.score}   Best: ${this.highScore}`);
@@ -278,6 +286,26 @@ class CoinDash extends Phaser.Scene {
       // Blink during the last seconds so the player can see it is about to vanish.
       const fading = poison.lifeMs < t.poisonWarnSeconds * 1000;
       poison.setAlpha(fading && Math.floor(poison.lifeMs / 150) % 2 ? 0.2 : 1);
+    }
+  }
+
+  updateGrowth(delta) {
+    // One growth step every growEvery coins picked up, capped at maxScale.
+    const g = COIN_DASH.growth;
+    const target = Math.min(g.maxScale, 1 + g.growStep * Math.floor(this.coinsPicked / g.growEvery));
+    if (target > this.playerScale) {
+      this.playerScale = target;
+      const label = this.add.text(this.player.x, this.player.y - 12 * target - 16, 'BIGGER!',
+        { font: 'bold 14px monospace', color: Phaser.Display.Color.IntegerToColor(COIN_DASH.colors.player).rgba })
+        .setOrigin(0.5);
+      this.tweens.add({ targets: label, y: label.y - 20, alpha: 0, duration: 700, onComplete: () => label.destroy() });
+    }
+    // Ease on delta like the countdowns, so growing stops while paused and nothing outlives a restart.
+    // The Arcade body follows on its own: each step Body.updateBounds() sets its size to the rectangle's
+    // 24x24 times scale, keeps it centred, and collideWorldBounds pushes it back inside the play area.
+    const scale = this.player.scaleX;
+    if (scale < this.playerScale) {
+      this.player.setScale(Math.min(this.playerScale, scale + g.growStep * delta / g.growMs));
     }
   }
 

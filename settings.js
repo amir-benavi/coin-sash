@@ -7,6 +7,9 @@ window.COIN_DASH = {
   coinMin: 1,
   coinMax: 4,
   playerSpeed: 240,
+  // Per coin picked up (not score) the player gets faster, up to maxPlayerSpeed; every growEvery coins
+  // it grows by growStep (scale), up to maxScale, easing over growMs of played time.
+  growth: { speedPerCoin: 4, maxPlayerSpeed: 380, growEvery: 10, growStep: 0.15, maxScale: 2, growMs: 250 },
   droneSpeed: 105,
   droneCount: 3,
   coinSoundVolume: 0.15,
