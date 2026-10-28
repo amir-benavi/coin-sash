@@ -9,6 +9,7 @@ window.COIN_DASH = {
   playerSpeed: 240,
   droneSpeed: 105,
   droneCount: 3,
+  coinSoundVolume: 0.15,
   fastDronesAt: 5,
   droneSpeedFast: 170,
   lives: 3,

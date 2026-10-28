@@ -35,6 +35,7 @@ class CoinDash extends Phaser.Scene {
       this.coins.killAndHide(coin);
       coin.body.enable = false;
       this.score++;
+      this.playCoinSound();
       // Mark the phase as over here; update() spawns the next one outside the physics callback.
       if (this.coins.countActive(true) === 0) this.phaseOver = true;
     });
@@ -44,6 +45,38 @@ class CoinDash extends Phaser.Scene {
     this.input.keyboard.on('keydown-R', () => this.scene.restart());
     // keydown-P fires for both p and P; Shift tells resume apart from pause.
     this.input.keyboard.on('keydown-P', (event) => (event.shiftKey ? this.resumeRound() : this.pauseRound()));
+    // Browsers may suspend audio until a user gesture; resume on any key press.
+    this.input.keyboard.on('keydown', () => {
+      const ctx = this.audioContext();
+      if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+    });
+  }
+
+  audioContext() {
+    // Prefer Phaser's WebAudio context; otherwise lazily create our own (null if unsupported).
+    if (this.sound && this.sound.context) return this.sound.context;
+    if (this.audioCtx === undefined) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      try { this.audioCtx = Ctx ? new Ctx() : null; } catch (e) { this.audioCtx = null; }
+    }
+    return this.audioCtx;
+  }
+
+  playCoinSound() {
+    // Synthesized two-note "blip" so the game needs no audio assets.
+    try {
+      const ctx = this.audioContext();
+      if (!ctx || ctx.state !== 'running') return;
+      const t = ctx.currentTime, osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(988, t);
+      osc.frequency.setValueAtTime(1319, t + 0.05);
+      gain.gain.setValueAtTime(COIN_DASH.coinSoundVolume, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.13);
+    } catch (e) { /* audio is optional */ }
   }
 
   spawnPhase() {
