@@ -14,7 +14,7 @@ class CoinDash extends Phaser.Scene {
     this.invulnerableMs = 0;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
-    this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
+    this.background = this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
       c.colors.background, 1, 0x24334b, 0.45);
     this.hud = this.add.text(18, 12, '', { font: '18px monospace', color: '#ffffff' });
     this.player = this.add.rectangle(c.width / 2, c.height / 2, 24, 24, c.colors.player);
@@ -116,6 +116,7 @@ class CoinDash extends Phaser.Scene {
 
   update(time, delta) {
     if (this.finished || this.paused) return;
+    this.updateBackground();
     if (this.phaseOver) {
       this.phaseOver = false;
       this.spawnPhase();
@@ -144,6 +145,31 @@ class CoinDash extends Phaser.Scene {
     this.hud.setText(`Coins: ${this.score}   Best: ${this.highScore}       ${hearts}       Time: ${seconds}s`);
     if (seconds === 0) this.finish('Time is up!');
     if (this.hearts === 0) this.finish('A drone caught you!');
+  }
+
+  updateBackground() {
+    // Cross-fade to the next palette colour every everySeconds of played time. Everything derives
+    // from the deadline (which resume pushes back), so pausing and restarting need no extra state.
+    const cycle = COIN_DASH.backgroundCycle;
+    const everyMs = cycle.everySeconds * 1000;
+    const elapsed = COIN_DASH.roundSeconds * 1000 - (this.deadline - this.time.now);
+    const step = Math.max(0, Math.floor(elapsed / everyMs));
+    const progress = step === 0 ? 1 : Math.min(1, (elapsed - step * everyMs) / cycle.fadeMs);
+    const colors = cycle.colors;
+    const grid = this.background;
+    // Brief glow of the grid lines while fading: 0 at the start and end of the fade, peak halfway.
+    if (grid.baseLineAlpha === undefined) grid.baseLineAlpha = grid.outlineFillAlpha;
+    grid.setOutlineStyle(grid.outlineFillColor, grid.baseLineAlpha + cycle.linePulse * Math.sin(progress * Math.PI));
+    let color = colors[step % colors.length];
+    if (progress < 1) {
+      const from = Phaser.Display.Color.IntegerToColor(colors[(step - 1) % colors.length]);
+      const to = Phaser.Display.Color.IntegerToColor(color);
+      color = Phaser.Display.Color.Interpolate.ColorWithColor(from, to, 1000, Math.round(progress * 1000)).color;
+    }
+    const camera = this.cameras.main;
+    if (color === grid.fillColor && color === camera.backgroundColor.color) return;
+    grid.setFillStyle(color, 1);
+    camera.setBackgroundColor(color);
   }
 
   pauseRound() {
