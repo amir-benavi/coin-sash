@@ -7,6 +7,9 @@ window.COIN_DASH = {
   coinMin: 1,
   coinMax: 4,
   playerSpeed: 240,
+  // Per coin picked up (not score) the player gets faster, up to maxPlayerSpeed; every growEvery coins
+  // it grows by growStep (scale), up to maxScale, easing over growMs of played time.
+  growth: { speedPerCoin: 4, maxPlayerSpeed: 380, growEvery: 10, growStep: 0.15, maxScale: 2, growMs: 250 },
   droneSpeed: 105,
   droneCount: 3,
   coinSoundVolume: 0.15,
@@ -37,5 +40,6 @@ window.COIN_DASH = {
   freezeMs: 5000, freezeCoinChance: 0.05, freezeColors: { coin: 0xbff4ff, outline: 0xffffff, drone: 0x7fd8ff },
   // Scan line: sweeps the play field every everyMs, taking durationMs; drawn in color at alpha.
   gridScan: { everyMs: 4000, durationMs: 1800, alpha: 0.4, color: 0x71e8ce },
+  powerUps: { firstAfterSeconds: 5, everySeconds: 8, max: 2, lifetimeSeconds: 8, warnSeconds: 2, hitRadius: 14 },
   colors: { background: 0x101c31, player: 0x71e8ce, coin: 0xffd166, drone: 0xff657a }
 };

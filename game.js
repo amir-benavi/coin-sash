@@ -1,4 +1,4 @@
-/* global Phaser, COIN_DASH */
+/* global Phaser, COIN_DASH, POWER_UPS */
 const HIGH_SCORE_KEY = 'coinDash.highScore';
 let memoryHighScore = 0;
 class CoinDash extends Phaser.Scene {
@@ -16,6 +16,10 @@ class CoinDash extends Phaser.Scene {
     this.pulseMs = 0;
     this.poisonSpawnMs = c.coinTypes.poisonEverySeconds * 1000;
     this.spareHeartUsed = false;
+    // Coins touched this round (not score, which power-ups double or zero): drives speed and size.
+    this.coinsPicked = 0;
+    this.playerSpeed = c.playerSpeed;
+    this.playerScale = 1; // target scale; updateGrowth() eases the player towards it
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     // Optional picture from the start screen; the grid fill is translucent so it shows through.
@@ -33,18 +37,22 @@ class CoinDash extends Phaser.Scene {
     this.physics.add.existing(this.player);
     this.player.body.setCollideWorldBounds(true);
     this.poisonCoins = this.physics.add.group();
+    this.powerUps = this.physics.add.group();
+    this.powerSpawnMs = c.powerUps.firstAfterSeconds * 1000;
+    Object.values(POWER_UPS).forEach((power) => power.reset && power.reset(this));
     this.coins = this.physics.add.group();
     this.phaseOver = false;
     this.spawnPhase();
     this.drones = this.physics.add.group();
     this.dronesFast = false;
-    for (let i = 0; i < c.droneCount; i++) this.addDrone(90 + i * 270, 100, 35 + i * 105);
+    for (let i = 0; i < c.droneCount; i++) this.spawnDrone(i);
     this.physics.add.overlap(this.player, this.coins, (player, coin) => {
       // Disable first so the same coin cannot be counted twice.
       if (this.finished || !coin.active) return;
       this.coins.killAndHide(coin);
       coin.body.enable = false;
       this.score += coin.value;
+      this.coinsPicked++;
       this.playCoinSound();
       if (coin.freeze) this.freezeDrones();
       // Mark the phase as over here; update() spawns the next one outside the physics callback.
@@ -52,6 +60,7 @@ class CoinDash extends Phaser.Scene {
     });
     this.physics.add.overlap(this.player, this.drones, (player, drone) => this.hitDrone(drone));
     this.physics.add.overlap(this.player, this.poisonCoins, (player, poison) => this.hitPoison(poison));
+    this.physics.add.overlap(this.player, this.powerUps, (player, item) => this.collectPowerUp(item));
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
     this.input.keyboard.on('keydown-R', () => this.scene.restart());
@@ -98,6 +107,11 @@ class CoinDash extends Phaser.Scene {
     } catch (e) { /* audio is optional */ }
   }
 
+  spawnDrone(i) {
+    // Drone i of droneCount at its starting spot; also used by power-ups that bring drones back.
+    return this.addDrone(90 + i * 270, 100, 35 + i * 105);
+  }
+
   spawnPhase() {
     // Remove leftover collected coins, then place a new random group of coins.
     this.coins.clear(true, true);
@@ -107,8 +121,9 @@ class CoinDash extends Phaser.Scene {
 
   randomSpot() {
     const c = COIN_DASH;
-    // Avoid spawning directly underneath the player, and keep coins and poison apart.
-    const others = [...this.coins.getChildren().filter((coin) => coin.active), ...this.poisonCoins.getChildren()];
+    // Avoid spawning directly underneath the player, and keep coins, poison and power-ups apart.
+    const others = [...this.coins.getChildren().filter((coin) => coin.active), ...this.poisonCoins.getChildren(),
+      ...this.powerUps.getChildren()];
     let x, y;
     do {
       x = Phaser.Math.Between(25, c.width - 25);
@@ -248,6 +263,7 @@ class CoinDash extends Phaser.Scene {
   loseHeart(reason) {
     // The overlap fires every frame while touching, so ignore hits while invulnerable.
     if (this.finished || this.hearts === 0 || this.invulnerableMs > 0) return false;
+    if (Object.values(POWER_UPS).some((power) => power.blocksDamage && power.blocksDamage(this))) return false;
     this.hearts--;
     this.deathReason = reason;
     if (this.hearts === 0) return true; // update() ends the round after refreshing the HUD.
@@ -289,11 +305,15 @@ class CoinDash extends Phaser.Scene {
     this.invulnerableMs = Math.max(0, this.invulnerableMs - delta);
     this.player.setAlpha(this.invulnerableMs > 0 && Math.floor(this.invulnerableMs / 100) % 2 ? 0.25 : 1);
     this.updateCoins(delta);
+    this.updatePowerUps(delta);
     const dx = Number(this.cursors.right.isDown || this.keys.D.isDown)
       - Number(this.cursors.left.isDown || this.keys.A.isDown);
     const dy = Number(this.cursors.down.isDown || this.keys.S.isDown)
       - Number(this.cursors.up.isDown || this.keys.W.isDown);
-    const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
+    this.updateGrowth(delta);
+    const g = COIN_DASH.growth;
+    this.playerSpeed = Math.min(g.maxPlayerSpeed, COIN_DASH.playerSpeed + g.speedPerCoin * this.coinsPicked);
+    const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(this.playerSpeed);
     this.player.body.setVelocity(direction.x, direction.y);
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
     const freezeHud = this.freezeLeftMs > 0 ? `   Freeze: ${Math.ceil(this.freezeLeftMs / 1000)}s` : '';
@@ -328,6 +348,82 @@ class CoinDash extends Phaser.Scene {
     }
   }
 
+  updateGrowth(delta) {
+    // One growth step every growEvery coins picked up, capped at maxScale.
+    const g = COIN_DASH.growth;
+    const target = Math.min(g.maxScale, 1 + g.growStep * Math.floor(this.coinsPicked / g.growEvery));
+    if (target > this.playerScale) {
+      this.playerScale = target;
+      const label = this.add.text(this.player.x, this.player.y - 12 * target - 16, 'BIGGER!',
+        { font: 'bold 14px monospace', color: Phaser.Display.Color.IntegerToColor(COIN_DASH.colors.player).rgba })
+        .setOrigin(0.5);
+      this.tweens.add({ targets: label, y: label.y - 20, alpha: 0, duration: 700, onComplete: () => label.destroy() });
+    }
+    // Ease on delta like the countdowns, so growing stops while paused and nothing outlives a restart.
+    // The Arcade body follows on its own: each step Body.updateBounds() sets its size to the rectangle's
+    // 24x24 times scale, keeps it centred, and collideWorldBounds pushes it back inside the play area.
+    const scale = this.player.scaleX;
+    if (scale < this.playerScale) {
+      this.player.setScale(Math.min(this.playerScale, scale + g.growStep * delta / g.growMs));
+    }
+  }
+
+  spawnPowerUp() {
+    const kinds = Object.keys(POWER_UPS);
+    if (kinds.length === 0) return;
+    // Weighted random pick among the registered power-ups.
+    const weights = kinds.map((kind) => POWER_UPS[kind].weight ?? 1);
+    let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
+    const kind = kinds.find((k, i) => (roll -= weights[i]) < 0) || kinds[kinds.length - 1];
+    const cfg = COIN_DASH.powerUps;
+    const { x, y } = this.randomSpot();
+    // An invisible circle is the hitbox; the power's own icon is drawn on top of it.
+    const item = this.add.circle(x, y, cfg.hitRadius, 0xffffff, 0);
+    this.physics.add.existing(item);
+    item.body.setCircle(cfg.hitRadius);
+    item.body.reset(x, y);
+    this.powerUps.add(item);
+    item.kind = kind;
+    item.lifeMs = cfg.lifetimeSeconds * 1000;
+    item.icon = POWER_UPS[kind].createIcon(this, x, y);
+  }
+
+  collectPowerUp(item) {
+    if (this.finished || !item.body.enable) return;
+    // Like poison: disable now, updatePowerUps() destroys it outside the overlap callback.
+    item.body.enable = false;
+    item.icon.setVisible(false);
+    item.lifeMs = 0;
+    const power = POWER_UPS[item.kind];
+    power.collect(this);
+    const label = this.add.text(this.player.x, this.player.y - 24, power.label,
+      { font: 'bold 18px monospace', color: Phaser.Display.Color.IntegerToColor(power.color || 0xffffff).rgba })
+      .setOrigin(0.5);
+    this.tweens.add({ targets: label, y: label.y - 30, alpha: 0, duration: 900, onComplete: () => label.destroy() });
+  }
+
+  updatePowerUps(delta) {
+    const cfg = COIN_DASH.powerUps;
+    this.powerSpawnMs -= delta;
+    if (this.powerSpawnMs <= 0) {
+      this.powerSpawnMs += cfg.everySeconds * 1000;
+      if (this.powerUps.getLength() < cfg.max) this.spawnPowerUp();
+    }
+    const pulse = Math.sin(this.pulseMs / 200);
+    for (const item of this.powerUps.getChildren().slice()) {
+      item.lifeMs -= delta;
+      if (item.lifeMs <= 0) {
+        item.icon.destroy();
+        item.destroy();
+        continue;
+      }
+      // Gentle bob, then blink during the last seconds like the poison coins.
+      item.icon.setScale(1 + 0.08 * pulse);
+      item.icon.setAlpha(item.lifeMs < cfg.warnSeconds * 1000 && Math.floor(item.lifeMs / 150) % 2 ? 0.2 : 1);
+    }
+    Object.values(POWER_UPS).forEach((power) => power.update && power.update(this, delta));
+  }
+
   updateDrones(delta) {
     const c = COIN_DASH;
     const d = c.droneSpawn;
@@ -336,7 +432,8 @@ class CoinDash extends Phaser.Scene {
     const remaining = this.deadline - this.time.now;
     const elapsed = c.roundSeconds * 1000 - remaining;
     const wanted = Math.min(d.max, c.droneCount + Math.floor(elapsed / (d.everySeconds * 1000)));
-    if (remaining > 0 && this.drones.getLength() < wanted) this.spawnExtraDrone();
+    const held = Object.values(POWER_UPS).some((power) => power.holdsDrones && power.holdsDrones(this));
+    if (remaining > 0 && !held && this.drones.getLength() < wanted) this.spawnExtraDrone();
     this.drones.getChildren().forEach((drone) => {
       if (drone.warnMs <= 0) return;
       drone.warnMs = Math.max(0, drone.warnMs - delta);
