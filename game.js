@@ -313,7 +313,7 @@ class CoinDash extends Phaser.Scene {
     const kinds = Object.keys(POWER_UPS);
     if (kinds.length === 0) return;
     // Weighted random pick among the registered power-ups.
-    const weights = kinds.map((kind) => POWER_UPS[kind].weight || 1);
+    const weights = kinds.map((kind) => POWER_UPS[kind].weight ?? 1);
     let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
     const kind = kinds.find((k, i) => (roll -= weights[i]) < 0) || kinds[kinds.length - 1];
     const cfg = COIN_DASH.powerUps;
