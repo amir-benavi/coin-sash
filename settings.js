@@ -25,5 +25,6 @@ window.COIN_DASH = {
     poisonEverySeconds: 6, poisonMax: 3, poisonLifetimeSeconds: 10, poisonWarnSeconds: 2,
     colors: { bonus: 0x7ff6ff, bonusOutline: 0xffffff, poison: 0xb04cff, poisonOutline: 0x2e0a45 }
   },
+  powerUps: { firstAfterSeconds: 5, everySeconds: 8, max: 2, lifetimeSeconds: 8, warnSeconds: 2, hitRadius: 14 },
   colors: { background: 0x101c31, player: 0x71e8ce, coin: 0xffd166, drone: 0xff657a }
 };
