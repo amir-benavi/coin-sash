@@ -15,6 +15,7 @@ window.COIN_DASH = {
   hud: { heartSize: 20, heartGap: 10, heartFull: 0xff4d6d, heartEmpty: 0x6b7a93, emptyAlpha: 0.3, popScale: 1.6, barAlpha: 0.3 },
   lives: 3,
   hitInvulnerableMs: 1500,
+  spareHeartMinCoins: 10,
   // Every everySeconds of played time the background cross-fades (fadeMs) to the next colour, cycling.
   // Keep the colours dark so player, coins and drones stay visible; the first should match colors.background.
   backgroundCycle: { everySeconds: 60, fadeMs: 1800, linePulse: 0.35,
