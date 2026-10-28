@@ -12,6 +12,7 @@ window.COIN_DASH = {
   coinSoundVolume: 0.15,
   fastDronesAt: 5,
   droneSpeedFast: 170,
+  hud: { heartSize: 20, heartGap: 10, heartFull: 0xff4d6d, heartEmpty: 0x6b7a93, emptyAlpha: 0.3, popScale: 1.6, barAlpha: 0.3 },
   lives: 3,
   hitInvulnerableMs: 1500,
   // Every everySeconds of played time the background cross-fades (fadeMs) to the next colour, cycling.

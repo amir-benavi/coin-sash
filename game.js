@@ -18,7 +18,11 @@ class CoinDash extends Phaser.Scene {
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.background = this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
       c.colors.background, 1, 0x24334b, 0.45);
+    // Top bar (y 0–44, above the play area): coins left, hearts centred, time right-aligned.
+    this.add.rectangle(c.width / 2, 22, c.width, 44, 0x000000, c.hud.barAlpha);
     this.hud = this.add.text(18, 12, '', { font: '18px monospace', color: '#ffffff' });
+    this.timeText = this.add.text(c.width - 18, 12, '', { font: '18px monospace', color: '#ffffff' }).setOrigin(1, 0);
+    this.createHearts();
     this.player = this.add.rectangle(c.width / 2, c.height / 2, 24, 24, c.colors.player);
     this.physics.add.existing(this.player);
     this.player.body.setCollideWorldBounds(true);
@@ -139,6 +143,48 @@ class CoinDash extends Phaser.Scene {
     this.loseHeart('Poison got you!');
   }
 
+  createHearts() {
+    const c = COIN_DASH;
+    // Sample the classic parametric heart once, scaled to heartSize px tall and centred on (0, 0).
+    const raw = [];
+    for (let i = 0; i < 40; i++) {
+      const t = i / 40 * Math.PI * 2;
+      raw.push({ x: 16 * Math.sin(t) ** 3,
+        y: -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) });
+    }
+    const top = Math.min(...raw.map((p) => p.y));
+    const bottom = Math.max(...raw.map((p) => p.y));
+    const k = c.hud.heartSize / (bottom - top);
+    this.heartShape = raw.map((p) => ({ x: p.x * k, y: (p.y - (top + bottom) / 2) * k }));
+    const step = 32 * k + c.hud.heartGap; // the curve is 32 units wide
+    this.heartIcons = [];
+    for (let i = 0; i < c.lives; i++) {
+      this.heartIcons.push(this.add.graphics({ x: c.width / 2 + (i - (c.lives - 1) / 2) * step, y: 22 }));
+    }
+    this.shownHearts = -1; // forces the first drawHearts() to paint every icon
+    this.drawHearts();
+  }
+
+  drawHearts() {
+    // Redraw only when the count changes.
+    if (this.shownHearts === this.hearts) return;
+    const hud = COIN_DASH.hud;
+    this.heartIcons.forEach((icon, i) => {
+      icon.clear();
+      if (i < this.hearts) {
+        icon.fillStyle(hud.heartFull, 1).fillPoints(this.heartShape, true);
+        return;
+      }
+      icon.fillStyle(hud.heartEmpty, hud.emptyAlpha).fillPoints(this.heartShape, true);
+      icon.lineStyle(2, hud.heartEmpty, 1).strokePoints(this.heartShape, true);
+      // Pop the heart that was just lost; the scene's tweens are killed on restart.
+      if (i < this.shownHearts) {
+        this.tweens.add({ targets: icon, scale: { from: hud.popScale, to: 1 }, duration: 250, ease: 'Back.easeOut' });
+      }
+    });
+    this.shownHearts = this.hearts;
+  }
+
   hitDrone() {
     this.loseHeart('A drone caught you!');
   }
@@ -181,8 +227,9 @@ class CoinDash extends Phaser.Scene {
     const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
     this.player.body.setVelocity(direction.x, direction.y);
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
-    const hearts = '♥'.repeat(this.hearts) + '♡'.repeat(COIN_DASH.lives - this.hearts);
-    this.hud.setText(`Coins: ${this.score}   Best: ${this.highScore}       ${hearts}       Time: ${seconds}s`);
+    this.hud.setText(`Coins: ${this.score}   Best: ${this.highScore}`);
+    this.timeText.setText(`Time: ${seconds}s`);
+    this.drawHearts();
     if (seconds === 0) this.finish('Time is up!');
     if (this.hearts === 0) this.finish(this.deathReason);
   }
