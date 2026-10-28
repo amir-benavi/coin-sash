@@ -31,5 +31,7 @@ window.COIN_DASH = {
     poisonEverySeconds: 6, poisonMax: 3, poisonLifetimeSeconds: 10, poisonWarnSeconds: 2,
     colors: { bonus: 0x7ff6ff, bonusOutline: 0xffffff, poison: 0xb04cff, poisonOutline: 0x2e0a45 }
   },
+  // Scan line: sweeps the play field every everyMs, taking durationMs; drawn in color at alpha.
+  gridScan: { everyMs: 4000, durationMs: 1800, alpha: 0.4, color: 0x71e8ce },
   colors: { background: 0x101c31, player: 0x71e8ce, coin: 0xffd166, drone: 0xff657a }
 };

@@ -19,6 +19,7 @@ class CoinDash extends Phaser.Scene {
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.background = this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
       c.colors.background, 1, 0x24334b, 0.45);
+    createGridScan(this);
     // Top bar (y 0–44, above the play area): coins left, hearts centred, time right-aligned.
     this.add.rectangle(c.width / 2, 22, c.width, 44, 0x000000, c.hud.barAlpha);
     this.hud = this.add.text(18, 12, '', { font: '18px monospace', color: '#ffffff' });
@@ -266,6 +267,7 @@ class CoinDash extends Phaser.Scene {
       });
     }
     this.updateDrones(delta);
+    updateGridScan(this, delta);
     // Blink while invulnerable; a countdown (not a timer or tween) leaves nothing behind on restart.
     this.invulnerableMs = Math.max(0, this.invulnerableMs - delta);
     this.player.setAlpha(this.invulnerableMs > 0 && Math.floor(this.invulnerableMs / 100) % 2 ? 0.25 : 1);
